@@ -19,7 +19,7 @@ const postGastos = async (req, res) => {
         const { roommate, descripcion, monto } = req.body;
 
         if (!roommate || !descripcion || !monto || !roommate.trim() || !descripcion.trim()) {
-            return res.status(400).json({ error: 'Los campos no pueden estar vacíos ni contener solo espacios.' });
+            return res.status(400).json({ error: 'Los campos no pueden estar vacíos ni contener solo espacios.' })
         }
 
         const id = uuidv4().slice(0, 3)
@@ -36,14 +36,17 @@ const postGastos = async (req, res) => {
         const getGastos = await readFile(path.join(__dirname, '../data/gastos.json'), 'utf-8')
         const gastos = JSON.parse(getGastos)
 
-        const roommateIndex = roommates.roommates.findIndex(r => r.nombre === roommate);
+        const amountPerRoommate = monto / roommates.roommates.length
 
+        roommates.roommates.forEach(r => {
+            if (r.nombre === roommate) {
+                r.recibe += monto - amountPerRoommate
+            } else {
+                r.debe += amountPerRoommate
+            }
+        });
 
-        if (roommateIndex !== -1) {
-            roommates.roommates[roommateIndex].debe -= monto;
-
-            await writeFile(path.join(__dirname, '../data/roommates.json'), JSON.stringify(roommates))
-        }
+        await writeFile(path.join(__dirname, '../data/roommates.json'), JSON.stringify(roommates))
 
         gastos.gastos.push(newGasto)
         await writeFile(path.join(__dirname, '../data/gastos.json'), JSON.stringify(gastos))
@@ -69,8 +72,15 @@ const deleteGastos = async (req, res) => {
         const monto = gastos.gastos[gastoIndex].monto
         const roommate = gastos.gastos[gastoIndex].roommate
 
-        const roommateIndex = roommates.roommates.findIndex(r => r.nombre === roommate)
-        roommates.roommates[roommateIndex].debe += monto
+        const amountPerRoommate = monto / roommates.roommates.length
+
+        roommates.roommates.forEach(r => {
+            if (r.nombre === roommate) {
+                r.recibe -= monto - amountPerRoommate
+            } else {
+                r.debe -= amountPerRoommate
+            }
+        });
 
         gastos.gastos.splice(gastoIndex, 1)
 
@@ -92,7 +102,7 @@ const putGastos = async (req, res) => {
 
         // Validación de los campos
         if (!roommate || !descripcion || !monto || !roommate.trim() || !descripcion.trim() || typeof monto !== 'number' || monto <= 0) {
-            return res.status(400).json({ error: 'Los campos no pueden estar vacíos ni contener solo espacios y el monto debe ser un número positivo.' });
+            return res.status(400).json({ error: 'Los campos no pueden estar vacíos ni contener solo espacios y el monto debe ser un número positivo.' })
         }
 
         const getRoommates = await readFile(path.join(__dirname, '../data/roommates.json'), 'utf-8')
@@ -105,15 +115,26 @@ const putGastos = async (req, res) => {
         const oldMonto = gastos.gastos[gastoIndex].monto
         const oldRoommate = gastos.gastos[gastoIndex].roommate
 
-        const roommateIndex = roommates.roommates.findIndex(r => r.nombre === oldRoommate)
-        roommates.roommates[roommateIndex].debe += oldMonto
+        const oldCountPorRoommate = oldMonto / roommates.roommates.length
+        const newCountPorRoommate = monto / roommates.roommates.length
+
+        roommates.roommates.forEach(r => {
+            if (r.nombre === oldRoommate) {
+                r.recibe -= oldMonto - oldCountPorRoommate
+            } else {
+                r.debe -= oldCountPorRoommate
+            }
+
+            if (r.nombre === roommate.trim()) {
+                r.recibe += monto - newCountPorRoommate
+            } else {
+                r.debe += newCountPorRoommate
+            }
+        });
 
         gastos.gastos[gastoIndex].roommate = roommate.trim()
         gastos.gastos[gastoIndex].descripcion = descripcion.trim()
         gastos.gastos[gastoIndex].monto = monto
-
-        const newRoommateIndex = roommates.roommates.findIndex(r => r.nombre === roommate.trim())
-        roommates.roommates[newRoommateIndex].debe -= monto
 
         await writeFile(path.join(__dirname, '../data/roommates.json'), JSON.stringify(roommates))
         await writeFile(path.join(__dirname, '../data/gastos.json'), JSON.stringify(gastos))
